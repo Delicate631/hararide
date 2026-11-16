@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HaulGo</title>
+<meta name="theme-color" content="#0a1330">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HaulGo">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#f2f5fb;--card:#fff;--tx:#0e1a3a;--mu:#5d6a8a;--ln:#dce3f1;--g:#f97316;--g2:#ea580c;--navy:#0a1330;--sh:0 4px 18px rgba(10,19,48,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#070d20;--card:#101a38;--tx:#eef2ff;--mu:#9aa7c9;--ln:#22305c;--sh:0 4px 18px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;flex-wrap:wrap;gap:10px;background:linear-gradient(135deg,#0a1330,#16275c);color:#fff;margin-bottom:16px;box-shadow:0 2px 14px rgba(0,0,0,.25)}
+.brand{display:flex;flex-direction:column;line-height:1.1}
+h1{margin:0;font-size:25px;letter-spacing:-.5px;color:#fff;font-weight:800}h1 b{color:var(--g)}
+.tag-line{font-size:11.5px;letter-spacing:.6px;color:#aab6dd;margin-top:3px}
+h2{margin:0 0 10px;font-size:19px;font-weight:700}h3{margin:16px 0 8px}
+header nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+nav a,button{font:inherit;padding:9px 15px;border:1px solid var(--ln);border-radius:12px;background:var(--card);color:var(--tx);cursor:pointer;text-decoration:none;display:inline-block;transition:transform .08s,box-shadow .15s,background .15s}
+button:active{transform:scale(.97)}button:disabled{opacity:.5;cursor:default}
+header nav a,header nav button{background:rgba(255,255,255,.09);color:#fff;border-color:rgba(255,255,255,.2)}
+nav a.on,button.pr{background:linear-gradient(135deg,var(--g),var(--g2));color:#fff;border-color:transparent;font-weight:700;box-shadow:0 3px 10px rgba(249,115,22,.35)}
+main{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;padding:0 16px 24px;max-width:1150px;margin:auto}
+@media(max-width:760px){main{grid-template-columns:1fr}header{padding:12px 14px}}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:18px;padding:16px;box-shadow:var(--sh)}
+#map{height:540px;border-radius:14px}@media(max-width:760px){#map{height:340px}}
+input,select{font:inherit;padding:11px 12px;border:1px solid var(--ln);border-radius:12px;background:var(--bg);color:var(--tx);width:100%;margin:5px 0;outline:none}
+input:focus,select:focus{border-color:var(--g);box-shadow:0 0 0 3px rgba(249,115,22,.22)}
+.box{border:1px solid var(--ln);border-radius:14px;padding:11px 13px;margin:9px 0;background:var(--bg)}.mu{color:var(--mu);font-size:13px}
+.big{font-size:26px;font-weight:800;color:var(--g)}
+.tag{display:inline-block;background:rgba(249,115,22,.15);color:var(--g2);border-radius:8px;padding:1px 8px;font-size:12px;font-weight:600}
+details>summary{cursor:pointer;font-weight:600}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:1000;background:var(--card);border:1px solid var(--ln);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.28);overflow:hidden;margin-top:2px}.sg{padding:10px 12px;cursor:pointer;border-top:1px solid var(--ln)}.sg:first-child{border-top:0}.sg:hover{background:rgba(249,115,22,.14)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--ln)}
+</style></head><body>
+<header><div class="brand"><h1>🚚 Haul<b>Go</b></h1><span class="tag-line">RIDES · PICKUPS · HAULAGE · CREW HIRE</span></div><nav id="nav"></nav></header>
+<main><section class="card"><div id="map"></div></section><section class="card" id="panel"></section></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// ====== PUT YOUR OWN VALUES HERE (Supabase > Project Settings > API) ======
+const SUPABASE_URL="https://strvlhdnrmdnfvieepzh.supabase.co", SUPABASE_KEY="sb_publishable_mCQrObUp4aejmPm3VtQ_oA_TrFCxoWN";
+// =========================================================================
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=i=>document.getElementById(i), HARARE=[-17.8292,31.0522];
+const map=L.map("map").setView(HARARE,12);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors"}).addTo(map);
+const grp=L.layerGroup().addTo(map), carG=L.layerGroup().addTo(map);
+let dd={},drivers=[],myRate=null,me=null,prof=null,pick=null,drop=null,est=null,ride=null,open=[],all=[],hidden=null,watch=null,lastPush=0;
+const role=()=>location.hash.slice(1)||"passenger";
+const SV={taxi:{n:"Taxi ride",i:"🚕",b:1,k:0.9,m:2},pickup:{n:"Pickup truck",i:"🛻",b:5,k:1.5,m:5},heavy:{n:"Heavy truck / haulage",i:"🚚",b:20,k:3,m:20},crew:{n:"Equipment & crew hire",i:"👷",b:15,k:2,m:15}};
+let svc="taxi",details="";
+const svn=x=>SV[x]||SV.taxi;
+// Popular Harare places (approximate centres). Passengers can always fine-tune by tapping the map.
+const PLACES=[["Harare CBD / City Centre",-17.8292,31.0522,"town central eastgate joina"],["Robert Gabriel Mugabe International Airport",-17.9318,31.0928,"airport rgm"],["Mbare Musika",-17.8590,31.0410,"mbare market musika"],["Avondale",-17.8000,31.0300,"avondale shops"],["Borrowdale",-17.7600,31.0900,"borrowdale village"],["Sam Levy's Village",-17.7585,31.0888,"borrowdale sam levys"],["Borrowdale Brooke",-17.7480,31.1050,"brooke"],["Belvedere",-17.8390,30.9960,"belvedere"],["Eastlea",-17.8260,31.0700,"eastlea"],["Highlands",-17.8040,31.0880,"highlands"],["Greendale",-17.8180,31.1100,"greendale"],["Mount Pleasant",-17.7750,31.0450,"mt pleasant"],["University of Zimbabwe",-17.7843,31.0536,"uz university"],["Milton Park",-17.8210,31.0440,"milton park"],["Arcadia",-17.8420,31.0420,"arcadia"],["Hatfield",-17.8680,31.0870,"hatfield"],["Waterfalls",-17.9000,31.0120,"waterfalls"],["Highfield",-17.8900,30.9900,"highfield"],["Glen Norah",-17.9100,30.9850,"glen norah"],["Glen View",-17.9150,30.9650,"glen view"],["Budiriro",-17.9100,30.9330,"budiriro"],["Mufakose",-17.8630,30.9450,"mufakose"],["Kuwadzana",-17.8330,30.9350,"kuwadzana"],["Kambuzuma",-17.8410,30.9780,"kambuzuma"],["Warren Park",-17.8350,30.9760,"warren park"],["Mabelreign",-17.8000,30.9800,"mabelreign"],["Marlborough",-17.7860,30.9690,"marlborough"],["Dzivarasekwa",-17.8000,30.9050,"dzivarasekwa"],["Southerton",-17.8600,31.0150,"southerton"],["Braeside",-17.8530,31.0680,"braeside"],["Cranborne",-17.8680,31.0730,"cranborne"],["Chisipite",-17.7980,31.1100,"chisipite"],["Msasa",-17.8470,31.1170,"msasa"],["Epworth",-17.8900,31.1500,"epworth"],["Ruwa",-17.8900,31.2440,"ruwa"],["Chitungwiza",-18.0127,31.0755,"chitungwiza chitown"]];
+const POPULAR=[0,1,2,3,4,6,12,16];
+function suggest(t){t=t.trim().toLowerCase();if(!t)return POPULAR.map(i=>PLACES[i]);
+ return PLACES.map(x=>{const n=x[0].toLowerCase(),a=x[3]||"";const sc=n.startsWith(t)?0:n.split(" ").some(w=>w.startsWith(t))?1:(n.includes(t)||a.includes(t))?2:9;return [sc,x]}).filter(z=>z[0]<9).sort((a,b)=>a[0]-b[0]).slice(0,6).map(z=>z[1])}
+async function setPlace(p){if(!pick||drop){pick=p;drop=null;est=null}else drop=p;map.setView([p.lat,p.lng],14);await draw();view()}
+document.addEventListener("click",e=>{const b=$("sug");if(b&&e.target.id!="q"&&!b.contains(e.target))b.style.display="none"});
+const fare=(km,x=svc)=>{const v=svn(x);return Math.max(v.m,+(v.b+v.k*km).toFixed(1))};
+const esc=s=>String(s??"").replace(/[<>&]/g,"");
+
+async function rev(ll){try{const j=await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${ll.lat}&lon=${ll.lng}`)).json();return esc((j.display_name||"Pinned spot").split(",").slice(0,2).join(","))}catch(e){return "Pinned spot"}}
+async function search(q){return (await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=zw&viewbox=30.8,-17.65,31.3,-18.0&bounded=1&q=${encodeURIComponent(q)}`)).json()}
+async function route(a,b){try{const j=await (await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`)).json();return j.routes[0]}catch(e){return null}}
+
+map.on("click",async e=>{if(role()!="passenger"||!prof||(ride))return;
+  const p={lat:e.latlng.lat,lng:e.latlng.lng,name:await rev(e.latlng)};
+  if(!pick||drop){pick=p;drop=null;est=null}else drop=p;
+  await draw();view()});
+async function draw(){grp.clearLayers();
+  if(pick)L.circleMarker([pick.lat,pick.lng],{color:"#3b82f6",radius:9,fillOpacity:1}).addTo(grp);
+  if(drop)L.circleMarker([drop.lat,drop.lng],{color:"#dc2626",radius:9,fillOpacity:1}).addTo(grp);
+  if(pick&&drop){const r=await route(pick,drop);const km=r?r.distance/1000:0;est={km:+km.toFixed(1),price:fare(km)};
+    if(r)L.geoJSON(r.geometry,{style:{color:"#f97316",weight:5}}).addTo(grp)}}
+function showRide(r){grp.clearLayers();if(!r)return;
+  L.circleMarker([r.pickup_lat,r.pickup_lng],{color:"#3b82f6",radius:9,fillOpacity:1}).addTo(grp);
+  L.circleMarker([r.drop_lat,r.drop_lng],{color:"#dc2626",radius:9,fillOpacity:1}).addTo(grp);
+  L.polyline([[r.pickup_lat,r.pickup_lng],[r.drop_lat,r.drop_lng]],{color:"#f97316",dashArray:"6 6"}).addTo(grp);
+  map.fitBounds([[r.pickup_lat,r.pickup_lng],[r.drop_lat,r.drop_lng]],{padding:[40,40]})}
+
+// ---------- auth ----------
+function authView(){$("panel").innerHTML=`<h2>Sign in</h2><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ chars)">
+<p class="mu">New here? Fill these too:</p><input id="nm" placeholder="Full name"><input id="ph" placeholder="Phone e.g. 0771234567">
+<select id="rl"><option value="passenger">I am a passenger</option><option value="driver">I am a driver</option></select>
+<div style="display:flex;gap:8px;margin-top:8px"><button class="pr" id="li">Log in</button><button id="su">Sign up</button></div><p class="mu" id="msg"></p>`;
+  $("li").onclick=async()=>{const{error}=await sb.auth.signInWithPassword({email:$("em").value,password:$("pw").value});if(error)$("msg").textContent=error.message;else boot()};
+  $("su").onclick=async()=>{const{data,error}=await sb.auth.signUp({email:$("em").value,password:$("pw").value});
+    if(error)return $("msg").textContent=error.message;if(!data.session)return $("msg").textContent="Check your email to confirm, then log in.";
+    const e2=(await sb.from("profiles").insert({id:data.user.id,name:$("nm").value,phone:$("ph").value,role:$("rl").value})).error;
+    if(e2)$("msg").textContent=e2.message;else boot()}}
+async function boot(){const{data:{session}}=await sb.auth.getSession();
+  if(!session){me=null;nav();return authView()}
+  me=session.user;prof=(await sb.from("profiles").select("*").eq("id",me.id).single()).data;
+  if(!prof){await sb.auth.signOut();return authView()}
+  const want=prof.role=="admin"?(["admin","driver","passenger"].includes(role())?role():"admin"):prof.role;
+  if(role()!=want){location.hash=want;return}
+  nav();await refresh();
+  sb.channel("r").on("postgres_changes",{event:"*",schema:"public",table:"rides"},refresh).subscribe();
+  setInterval(cars,6000);cars()}
+function nav(){$("nav").innerHTML=(prof?[["passenger","Passenger"],["driver","Driver"],["admin","Super user"]].filter(([k])=>prof.role=="admin"||k==prof.role).map(([k,v])=>`<a href="#${k}" class="${role()==k?"on":""}">${v}</a>`).join("")+' <button id="lo">Log out</button>':"");
+  if($("lo"))$("lo").onclick=async()=>{await sb.auth.signOut();location.reload()}}
+addEventListener("hashchange",()=>{if(prof){nav();refresh()}});
+
+// ---------- data ----------
+async function refresh(){if(!prof)return;const r=role();
+  if(r=="passenger"){const{data}=await sb.from("rides").select("*,d:driver_id(name,phone,car,plate)").eq("passenger_id",me.id).order("created_at",{ascending:false}).limit(1);
+    const x=data?.[0];ride=x&&x.id!=hidden&&(["requested","accepted","progress"].includes(x.status)||(x.status=="done"&&(!x.rating||(x.payment=="ecocash"&&!x.paid))))?x:null;if(ride)showRide(ride)}
+  if(r=="driver"){const{data}=await sb.from("rides").select("*,p:passenger_id(name,phone)").or(`status.eq.requested,driver_id.eq.${me.id}`).order("created_at",{ascending:false}).limit(30);
+    ride=(data||[]).find(x=>x.driver_id==me.id&&["accepted","progress"].includes(x.status))||null;open=(data||[]).filter(x=>x.status=="requested"&&(prof.services||["taxi"]).includes(x.service||"taxi"));const rt=(data||[]).filter(x=>x.driver_id==me.id&&x.rating);myRate=rt.length?(rt.reduce((a,x)=>a+x.rating,0)/rt.length).toFixed(1):null;if(ride)showRide(ride)}
+  if(r=="admin"){drivers=(await sb.from("profiles").select("*").eq("role","driver")).data||[];dd={};((await sb.from("driver_docs").select("driver_id,ai_status")).data||[]).forEach(x=>dd[x.driver_id]=x.ai_status);all=(await sb.from("rides").select("*").order("created_at",{ascending:false}).limit(200)).data||[]}
+  view()}
+async function cars(){if(role()!="passenger")return;carG.clearLayers();
+  const since=new Date(Date.now()-60000).toISOString();const{data}=await sb.from("driver_locations").select("*").gt("updated_at",since);
+  (data||[]).forEach(d=>L.marker([d.lat,d.lng],{icon:L.divIcon({html:"🚚",className:"",iconSize:[24,24]})}).addTo(carG))}
+
+// ---------- views ----------
+function view(){if(!prof)return;const r=role();$("panel").innerHTML=r=="driver"?dView():r=="admin"?aView():pView();wire()}
+function pView(){if(ride){const s={requested:"Waiting for a driver to accept…",accepted:"Driver is on the way",progress:"Trip in progress",done:"Trip completed"}[ride.status];
+  return `<h2>Your ride</h2><div class="box">${svn(ride.service).i} <b>${svn(ride.service).n}</b>${ride.details?" · "+esc(ride.details):""}<br>${esc(ride.pickup_name)} → ${esc(ride.drop_name)}<br><span class="big">$${(+ride.price).toFixed(2)}</span> <span class="mu">${ride.payment}</span><p>${s}</p>${ride.d?`<p>Driver: <b>${esc(ride.d.name)}</b> ${esc(ride.d.phone)}<br>Car: <b>${esc(ride.d.car)}</b><br>Plate: <b>${esc(ride.d.plate)}</b></p>`:""}</div>`+
+  (ride.status=="requested"?'<button id="cx">Cancel ride</button>':"")+
+  (ride.status=="done"&&ride.payment=="ecocash"&&!ride.paid?`<input id="ep" placeholder="EcoCash number" value="${esc(prof.phone)}"><button class="pr" id="pay">Pay $${(+ride.price).toFixed(2)} with EcoCash</button><p class="mu" id="pm"></p>`:"")+
+  (ride.status=="done"?(ride.rating?`<p>You rated ${ride.rating}★</p>`:'<p class="mu">Rate your driver:</p>'+[1,2,3,4,5].map(n=>`<button data-rt="${n}">${n}★</button>`).join(" "))+' <button id="nw">New ride</button>':"")}
+  return `<h2>What do you need?</h2><select id="sv">${Object.entries(SV).map(([k,v])=>`<option value="${k}" ${k==svc?"selected":""}>${v.i} ${v.n}</option>`).join("")}</select>${svc!="taxi"?`<input id="dt" placeholder="Describe the job e.g. 2 tonnes of bricks, 3 helpers" value="${esc(details)}">`:""}<h2 style="margin-top:12px">${!pick||drop?"Where from?":"Where to?"}</h2><p class="mu">Type a place and pick a suggestion, or just tap the map.</p><div style="position:relative"><input id="q" autocomplete="off" placeholder="${!pick||drop?"Pickup: type a place or tap the map":"Drop-off: type a place or tap the map"}"><div id="sug" class="sug" style="display:none"></div></div>
+  <div class="box"><span class="mu">Pickup</span><br><b>${esc(pick?.name)||"Tap the map"}</b></div><div class="box"><span class="mu">Drop-off</span><br><b>${esc(drop?.name)||"Tap the map"}</b></div>`+
+  (est?`<p class="mu">${est.km} km · suggested $${est.price.toFixed(2)}. Name your price:</p><input id="pr" type="number" step="0.5" min="1" value="${est.price}"><select id="pt"><option value="cash">Pay cash to driver</option><option value="ecocash">Pay with EcoCash</option></select><p></p><button class="pr" id="go">Find a driver</button> `:"")+`<button id="rs">Reset</button> <button id="gps">Use my location</button>`}
+function dView(){if(!prof.approved)return prof.plate?`<h2>Driver mode</h2><p>Documents received. We are checking your ID, licence and car. You can start driving once approved.</p><button onclick="location.reload()">Check again</button>`:`<h2>Verify your account</h2><p class="mu">Required before you can drive. Your documents are private and only checked by HaulGo.</p><input id="vid" placeholder="National ID number"><input id="vpl" placeholder="Vehicle number plate e.g. AEF 1234"><input id="vcar" placeholder="Vehicle make, model and colour"><p class="mu">Services you offer</p>${Object.entries(SV).map(([k,v])=>`<label style="display:block"><input type="checkbox" data-vs="${k}" style="width:auto" ${k=="taxi"?"checked":""}> ${v.i} ${v.n}</label>`).join("")}<p class="mu">National ID photo</p><input id="f1" type="file" accept="image/*"><p class="mu">Driving licence photo</p><input id="f2" type="file" accept="image/*"><p class="mu">Selfie holding your ID</p><input id="f3" type="file" accept="image/*"><p class="mu">Photo of your vehicle showing the plate</p><input id="f4" type="file" accept="image/*"><p></p><button class="pr" id="vsub">Submit for approval</button><p class="mu" id="vmsg"></p>`;let h=`<h2>Driver mode${myRate?` · ${myRate}★`:""}</h2><label><input type="checkbox" id="on" style="width:auto" ${watch!=null?"checked":""}> I am online (shares my location)</label>`;
+  if(ride)return h+`<div class="box">${svn(ride.service).i} <b>${svn(ride.service).n}</b>${ride.details?" · "+esc(ride.details):""}<br><b>${esc(ride.pickup_name)} → ${esc(ride.drop_name)}</b><br>Fare $${(+ride.price).toFixed(2)} (${ride.payment}) · you keep $${(ride.price*0.9).toFixed(2)}<br><span class="mu">${esc(ride.p?.name)} ${esc(ride.p?.phone)}</span><p></p><button class="pr" id="st" data-s="${ride.status=="accepted"?"progress":"done"}">${ride.status=="accepted"?"Passenger picked up":"Complete ride"}</button></div>`;
+  return h+svBox()+`<h2 style="margin-top:12px">Requests (${open.length})</h2>`+(open.map(r=>`<div class="box">${svn(r.service).i} <b>${svn(r.service).n}</b>${r.details?" · "+esc(r.details):""}<br><b>${esc(r.pickup_name)} → ${esc(r.drop_name)}</b><br>${r.km} km · <b>$${(+r.price).toFixed(2)}</b> ${r.payment}<p></p><button class="pr" data-acc="${r.id}">Accept</button> <button data-v="${r.id}">Map</button></div>`).join("")||'<p class="mu">No requests right now.</p>')}
+const svBox=()=>`<details class="box"><summary>My services: ${(prof.services||["taxi"]).map(x=>svn(x).i).join(" ")}</summary>${Object.entries(SV).map(([k,v])=>`<label style="display:block"><input type="checkbox" data-sv="${k}" style="width:auto" ${(prof.services||["taxi"]).includes(k)?"checked":""}> ${v.i} ${v.n}</label>`).join("")}<p></p><button id="svs">Save services</button></details>`;
+function aView(){const d=all.filter(x=>x.status=="done"),g=d.reduce((s,x)=>s+ +x.price,0),c=d.reduce((s,x)=>s+ +x.commission,0);
+  return `<h2>Super user</h2><div class="mu">Your commission (10%)</div><div class="big">$${c.toFixed(2)}</div><div class="mu">${d.length} completed rides · gross $${g.toFixed(2)}</div><h3>Drivers</h3>${drivers.map(x=>`<div class="box">${esc(x.name)} · ${esc(x.phone)} · ${esc(x.car)||"no car"} · ${esc(x.plate)||"no plate"} · <b>${x.approved?"Approved":"Pending"}</b> ${dd[x.id]?`<span class="tag">AI: ${dd[x.id]}</span>`:""} <button data-docs="${x.id}">Documents</button> <button data-ap="${x.id}" data-v2="${x.approved?0:1}">${x.approved?"Suspend":"Approve"}</button></div>`).join("")||'<p class="mu">No drivers yet.</p>'}<h3>Rides</h3><div style="overflow-x:auto"><table><tr><th>Route</th><th>Fare</th><th>10%</th><th>Pay</th><th></th></tr>`+
+  all.map(x=>`<tr><td>${svn(x.service).i} ${esc(x.pickup_name)} → ${esc(x.drop_name)}<br><span class="mu">${x.status}</span></td><td>$${(+x.price).toFixed(2)}</td><td>${x.status=="done"?"$"+(+x.commission).toFixed(2):"-"}</td><td>${x.payment}${x.paid?" ✓":""}</td><td>${x.status=="done"&&!x.paid?`<button data-paid="${x.id}">Mark paid</button>`:""}</td></tr>`).join("")+`</table></div>`}
+function wire(){const g=i=>$(i);
+  if(g("q")){const q=g("q"),sg=g("sug");
+    const show=()=>{const t=q.value,l=suggest(t);sg.innerHTML=(t.trim()?"":'<div class="mu" style="padding:6px 10px">Popular places</div>')+l.map((x,i)=>`<div class="sg" data-i="${PLACES.indexOf(x)}">📍 ${esc(x[0])}</div>`).join("")+(t.trim()?`<div class="sg" data-web="1">🔎 Search more places for "${esc(t)}"</div>`:"");sg.style.display="block";
+      sg.querySelectorAll(".sg").forEach(d=>d.onclick=async()=>{sg.style.display="none";if(d.dataset.web)return webSearch(t);const x=PLACES[+d.dataset.i];await setPlace({lat:x[1],lng:x[2],name:esc(x[0])})})};
+    const webSearch=async t=>{q.disabled=true;const r=(await search(t).catch(()=>[]))[0];q.disabled=false;if(!r){q.value="";q.placeholder="Not found. Try another name or tap the map";return}await setPlace({lat:+r.lat,lng:+r.lon,name:esc(r.display_name.split(",").slice(0,2).join(","))})};
+    q.onfocus=show;q.oninput=show;
+    q.onkeydown=async e=>{if(e.key!="Enter")return;const l=suggest(q.value);if(l.length&&q.value.trim()){const x=l[0];sg.style.display="none";return setPlace({lat:x[1],lng:x[2],name:esc(x[0])})}if(q.value.trim())webSearch(q.value)}}
+  if(g("gps"))g("gps").onclick=()=>navigator.geolocation.getCurrentPosition(async pos=>{const ll={lat:pos.coords.latitude,lng:pos.coords.longitude};pick={...ll,name:await rev(ll)};drop=null;est=null;map.setView([ll.lat,ll.lng],14);await draw();view()});
+  if(g("rs"))g("rs").onclick=()=>{pick=drop=est=null;grp.clearLayers();view()};
+  if(g("go"))g("go").onclick=async()=>{const{error}=await sb.from("rides").insert({passenger_id:me.id,pickup_name:pick.name,pickup_lat:pick.lat,pickup_lng:pick.lng,drop_name:drop.name,drop_lat:drop.lat,drop_lng:drop.lng,km:est.km,price:Math.max(1,+g("pr").value||est.price),payment:g("pt").value,service:svc,details:svc=="taxi"?null:(details.trim()||null)});if(error)alert(error.message);else details="";pick=drop=est=null;refresh()};
+  if(g("sv"))g("sv").onchange=e=>{svc=e.target.value;if(est)est.price=fare(est.km);view()};
+  if(g("dt"))g("dt").oninput=e=>{details=e.target.value.replace(/"/g,"'")};
+  if(g("svs"))g("svs").onclick=async()=>{const l=[...document.querySelectorAll("[data-sv]")].filter(c=>c.checked).map(c=>c.dataset.sv);if(!l.length)return alert("Pick at least one service");const{error}=await sb.rpc("set_my_services",{p_services:l});if(error)return alert(error.message);prof.services=l;refresh()};
+  if(g("cx"))g("cx").onclick=async()=>{await sb.from("rides").update({status:"cancelled"}).eq("id",ride.id);ride=null;grp.clearLayers();refresh()};
+  if(g("nw"))g("nw").onclick=()=>{hidden=ride.id;ride=null;grp.clearLayers();view()};
+  document.querySelectorAll("[data-rt]").forEach(b=>b.onclick=async()=>{await sb.from("rides").update({rating:+b.dataset.rt}).eq("id",ride.id);refresh()});
+  if(g("pay"))g("pay").onclick=async()=>{g("pm").textContent="Sending EcoCash prompt to your phone…";
+    try{const r=await (await fetch("/api/paynow",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({rideId:ride.id,amount:ride.price,phone:g("ep").value,email:me.email})})).json();
+      g("pm").textContent=r.status&&r.status.toLowerCase()=="ok"?"Approve the payment on your phone. The super user will confirm it.":"Payment could not start: "+(r.error||r.status)}catch(e){g("pm").textContent="Payment service unavailable."}};
+  if(g("on"))g("on").onchange=e=>{if(e.target.checked){watch=navigator.geolocation.watchPosition(p=>{if(Date.now()-lastPush<5000)return;lastPush=Date.now();sb.from("driver_locations").upsert({driver_id:me.id,lat:p.coords.latitude,lng:p.coords.longitude,updated_at:new Date().toISOString()})},()=>alert("Allow location access"),{enableHighAccuracy:true})}else{navigator.geolocation.clearWatch(watch);watch=null}};
+  document.querySelectorAll("[data-acc]").forEach(b=>b.onclick=async()=>{const{data}=await sb.from("rides").update({driver_id:me.id,status:"accepted"}).eq("id",b.dataset.acc).eq("status","requested").select();if(!data?.length)alert("Another driver took this ride.");refresh()});
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>showRide(open.find(x=>x.id==b.dataset.v)));
+  if(g("st"))g("st").onclick=async()=>{await sb.from("rides").update({status:g("st").dataset.s}).eq("id",ride.id);if(g("st").dataset.s=="done"){ride=null;grp.clearLayers()}refresh()};
+  if(g("vsub"))g("vsub").onclick=submitDocs;
+  document.querySelectorAll("[data-docs]").forEach(b=>b.onclick=()=>showDocs(b.dataset.docs));
+  document.querySelectorAll("[data-ap]").forEach(b=>b.onclick=async()=>{if(b.dataset.v2=="1"&&dd[b.dataset.ap]!="pass"&&!confirm("AI check: "+(dd[b.dataset.ap]||"not run")+". Approve anyway?"))return;const{error}=await sb.from("profiles").update({approved:b.dataset.v2=="1"}).eq("id",b.dataset.ap);if(error)alert(error.message);refresh()});
+  document.querySelectorAll("[data-paid]").forEach(b=>b.onclick=async()=>{await sb.from("rides").update({paid:true}).eq("id",b.dataset.paid);refresh()})}
+function shrink(f){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const s=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*s;c.height=i.height*s;c.getContext("2d").drawImage(i,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):no(new Error("Image problem")),"image/jpeg",0.85)};i.onerror=()=>no(new Error("Could not read photo"));i.src=URL.createObjectURL(f)})}
+async function runAI(id){try{const{data:{session}}=await sb.auth.getSession();const r=await fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+session.access_token},body:JSON.stringify(id?{driver_id:id}:{})});return await r.json()}catch(e){return null}}
+const rep=d=>{const a=d.ai_report;return `<div style="background:#222;color:#fff;border-radius:10px;padding:10px;margin:8px 0"><b>AI check: ${d.ai_status||"not run"}</b> <button id="rr">${a?"Run again":"Run AI check"}</button>`+(a?`<p>${esc(a.summary)}</p><ul>`+(a.checks||[]).map(c=>`<li>${c.ok===true?"✅":c.ok===false?"❌":"⚠️"} ${esc(c.name)}: ${esc(c.note)}</li>`).join("")+"</ul>":"")+`<p style="font-size:12px;opacity:.7">AI assists only. It does not match faces. Compare the selfie and ID yourself before approving.</p></div>`};
+async function submitDocs(){const g=i=>$(i),m=g("vmsg");
+ const v={id:g("vid").value.trim(),pl:g("vpl").value.trim(),car:g("vcar").value.trim()},fs=[1,2,3,4].map(i=>g("f"+i).files[0]),svs=[...document.querySelectorAll("[data-vs]")].filter(c=>c.checked).map(c=>c.dataset.vs);
+ if(!v.id||!v.pl||!v.car||fs.some(f=>!f))return m.textContent="Please fill every box and add all 4 photos.";
+ if(fs.some(f=>f.size>10e6))return m.textContent="Each photo must be under 10 MB.";
+ g("vsub").disabled=true;m.textContent="Uploading, please wait…";
+ try{const k=["id","licence","selfie","car"],paths=[];
+  for(let i=0;i<4;i++){const p=`${me.id}/${Date.now()}-${k[i]}.jpg`;const bl=await shrink(fs[i]);const{error}=await sb.storage.from("driver-docs").upload(p,bl,{contentType:"image/jpeg"});if(error)throw error;paths.push(p)}
+  const{error}=await sb.rpc("submit_driver_docs",{p_id_number:v.id,p_plate:v.pl,p_car:v.car,p_id_path:paths[0],p_licence_path:paths[1],p_selfie_path:paths[2],p_car_path:paths[3]});
+  if(error)throw error;
+  await sb.rpc("set_my_services",{p_services:svs.length?svs:["taxi"]});m.textContent="Checking your documents (up to a minute)…";await runAI();
+  prof=(await sb.from("profiles").select("*").eq("id",me.id).single()).data;view()
+ }catch(e){m.textContent="Could not submit: "+e.message;g("vsub").disabled=false}}
+async function showDocs(id){const{data:d}=await sb.from("driver_docs").select("*").eq("driver_id",id).maybeSingle();if(!d)return alert("This driver has not uploaded documents yet.");
+ const{data:u}=await sb.storage.from("driver-docs").createSignedUrls([d.id_path,d.licence_path,d.selfie_path,d.car_path],300);
+ const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);overflow:auto;padding:20px;z-index:9999";
+ o.innerHTML=`<div style="max-width:700px;margin:auto"><button id="xc">Close</button><p style="color:#fff">ID number: ${esc(d.id_number)} · Plate: ${esc(d.plate)} · ${esc(d.car_model)}</p>${rep(d)}`+(u||[]).map(x=>`<img src="${x.signedUrl}" style="width:100%;margin:6px 0;border-radius:8px">`).join("")+`</div>`;
+ document.body.appendChild(o);o.querySelector("#xc").onclick=()=>o.remove();o.querySelector("#rr").onclick=async()=>{o.querySelector("#rr").textContent="Checking…";await runAI(id);o.remove();showDocs(id)}}
+boot();
+</script><div id="inst" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:9000;background:#0a1330;color:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.4);align-items:center;gap:10px;max-width:520px;margin:auto">
+<span id="insttx" style="flex:1;font-size:14px">Install HaulGo on your phone</span><button class="pr" id="instbtn">Install</button><button id="instx" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.3)">✕</button></div>
+<script>
+(function(){
+ if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+ var box=document.getElementById("inst"),tx=document.getElementById("insttx"),btn=document.getElementById("instbtn"),dp=null;
+ var standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+ var dismissed=false;try{dismissed=localStorage.getItem("hg-inst")=="1"}catch(e){}
+ document.getElementById("instx").onclick=function(){box.style.display="none";try{localStorage.setItem("hg-inst","1")}catch(e){}};
+ if(standalone||dismissed)return;
+ addEventListener("beforeinstallprompt",function(e){e.preventDefault();dp=e;box.style.display="flex"});
+ btn.onclick=async function(){if(!dp)return;dp.prompt();await dp.userChoice;dp=null;box.style.display="none"};
+ if(/iphone|ipad|ipod/i.test(navigator.userAgent)){tx.innerHTML="To install: tap <b>Share</b>, then <b>Add to Home Screen</b>";btn.style.display="none";box.style.display="flex"}
+ addEventListener("appinstalled",function(){box.style.display="none"});
+})();
+</script>
+</body></html>
